@@ -1,13 +1,16 @@
 #include "pmu.hpp"
+#include "../../logger.hpp"
 
 bool PMU::init(HWCDC &serial, TwoWire &wire) {
-    serial.println("# Initializing PMU (AXP2101)...");
+    logger.debug("PMU", "Starting AXP2101 initialization...");
+    
     if(!this->pmu.begin(wire, this->pmuAddress, PMU_SDA, PMU_SCL)) {
-        serial.printf("✗ AXP2101 not found at address 0x%02X\n", pmuAddress);
+        logger.failure("PMU", "AXP2101 not found");
         initialized = false;
         return false;
     }
-    serial.printf("✓ AXP2101 found at address 0x%02X\n", pmuAddress);
+    
+    logger.success("PMU", "AXP2101 initialized successfully");
     initialized = true;
     return true;
 }

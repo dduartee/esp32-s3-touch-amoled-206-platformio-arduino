@@ -1,5 +1,6 @@
 #include "display.hpp"
 #include <cstdarg>
+#include "../../logger.hpp"
 
 Display::Display() : gfx(nullptr), initialized(false) {
 }
@@ -12,19 +13,21 @@ Display::~Display() {
 
 bool Display::init(HWCDC &usbSerial) {
     this->usbSerial = &usbSerial;
-    this->usbSerial->println("# Initializing Display (OC5300 AMOLED)...");
     
-    this->usbSerial->println("=== DISPLAY INITIALIZATION ===");
+    logger.debug("DISPLAY", "Starting CO5300 AMOLED initialization...");
     
     // Initialize QSPI bus
+    logger.debug("DISPLAY", "Creating QSPI bus...");
     qspi_bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
     
     if (!qspi_bus) {
-        this->usbSerial->println("✗ Failed to create QSPI bus");
+        logger.failure("DISPLAY", "Failed to create QSPI bus");
         return false;
     }
+    logger.success("DISPLAY", "QSPI bus created successfully");
     
     // Initialize display driver
+    logger.debug("DISPLAY", "Creating CO5300 driver instance...");
     gfx = new Arduino_CO5300(
         qspi_bus, LCD_RESET, LCD_ORIENTATION,
         LCD_WIDTH, LCD_HEIGHT,
@@ -33,29 +36,18 @@ bool Display::init(HWCDC &usbSerial) {
     );
     
     if (!gfx) {
-        this->usbSerial->println("✗ Failed to create CO5300 display driver");
+        logger.failure("DISPLAY", "Failed to create CO5300 display driver");
         delete qspi_bus;
         qspi_bus = nullptr;
         return false;
     }
+    logger.success("DISPLAY", "CO5300 driver instance created");
     
-    this->usbSerial->println("Starting display...");
+    logger.debug("DISPLAY", "Starting display hardware...");
     gfx->begin();
     gfx->setRotation(0);
 
-    // Clear screen and show init message
-    gfx->fillScreen(0x0000); // Black background
-    gfx->setTextColor(0xFFFF); // White text
-    gfx->setTextSize(2);
-    gfx->setCursor(20, 20);
-    gfx->println("CO5300 AMOLED");
-    gfx->setCursor(20, 50);
-    gfx->setTextSize(1);
-    gfx->printf("Size: %dx%d", gfx->width(), gfx->height());
-    
-    this->usbSerial->printf("✓ AMOLED Display initialized (CO5300)\n");
-    this->usbSerial->printf("Display size: %dx%d pixels\n", gfx->width(), gfx->height());
-    
+    logger.success("DISPLAY", "Display ready");
     initialized = true;
     return true;
 }
