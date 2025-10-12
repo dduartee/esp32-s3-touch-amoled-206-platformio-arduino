@@ -46,6 +46,6 @@
     "require_upload_port": true,
     "speed": 460800
   },
-  "url": "https://github.com/agrucza/esp32-s3-touch-amoled-206-platformio-arduino",
+  "url": "https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-2.06",
   "vendor": "Waveshare"
 }
