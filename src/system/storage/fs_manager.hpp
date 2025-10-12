@@ -4,11 +4,14 @@
 #include "logger/logger.hpp"
 
 class FSManager {
+private:
+    Logger* logger = nullptr;
+    bool initialized = false;
 public:
-    FSManager();
+    FSManager(Logger* logger);
     ~FSManager();
 
-    bool begin();
+    bool isInitialized() const { return initialized; }
     size_t totalKB() { return LittleFS.totalBytes() / 1024; }
     size_t usedKB() { return LittleFS.usedBytes() / 1024; }
     bool exists(const char* path) { return LittleFS.exists(path); }

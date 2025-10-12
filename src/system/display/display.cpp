@@ -1,40 +1,23 @@
 #include "display.hpp"
 #include <cstdarg>
 
-Display::Display() : gfx(nullptr), initialized(false) {
-}
-
-Display::~Display() {
-    powerOff();
-}
-
-void Display::powerOn() {
-    logger.debug("DISPLAY", "Powering on display...");
-    gfx->displayOn();
-}
-
-void Display::powerOff() {
-    logger.debug("DISPLAY", "Powering off display and freeing resources...");
-    gfx->displayOff();
-}
-
-bool Display::init() {
-    logger.debug("DISPLAY", "Starting CO5300 AMOLED initialization...");
+Display::Display(Logger* logger) : gfx(nullptr), initialized(false) {
+    this->logger = logger;
+    logger->debug("DISPLAY", "Starting CO5300 AMOLED initialization...");
 
     // Initialize QSPI bus
-    logger.debug("DISPLAY", "Creating QSPI bus...");
+    logger->debug("DISPLAY", "Creating QSPI bus...");
     qspi_bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
 
     if (!qspi_bus) {
-        logger.failure("DISPLAY", "Failed to create QSPI bus");
-        return false;
+        logger->failure("DISPLAY", "Failed to create QSPI bus");
     }
 
-    logger.success("DISPLAY", "QSPI bus created successfully");
-    
+    logger->success("DISPLAY", "QSPI bus created successfully");
+
     // Initialize display driver
-    logger.debug("DISPLAY", "Creating CO5300 driver instance...");
-    
+    logger->debug("DISPLAY", "Creating CO5300 driver instance...");
+
     gfx = new Arduino_CO5300(
         qspi_bus, LCD_RESET, LCD_ORIENTATION,
         LCD_WIDTH, LCD_HEIGHT,
@@ -43,25 +26,37 @@ bool Display::init() {
     );
     
     if (!gfx) {
-        logger.failure("DISPLAY", "Failed to create CO5300 display driver");
+        logger->failure("DISPLAY", "Failed to create CO5300 display driver");
         delete qspi_bus;
         qspi_bus = nullptr;
-        return false;
     }
-    logger.success("DISPLAY", "CO5300 driver instance created");
-    
-    logger.debug("DISPLAY", "Starting display hardware...");
+    logger->success("DISPLAY", "CO5300 driver instance created");
+
+    logger->debug("DISPLAY", "Starting display hardware...");
     gfx->begin();
 
-    logger.debug("DISPLAY", "Setting rotation...");
+    logger->debug("DISPLAY", "Setting rotation...");
     gfx->setRotation(0);
 
-    logger.debug("DISPLAY", "Filling screen with red for initial test...");
+    logger->debug("DISPLAY", "Filling screen with red for initial test...");
     gfx->fillScreen(RGB565_RED);
 
-    logger.success("DISPLAY", "Display ready");
+    logger->success("DISPLAY", "Display ready");
     initialized = true;
-    return true;
+}
+
+Display::~Display() {
+    powerOff();
+}
+
+void Display::powerOn() {
+    logger->debug("DISPLAY", "Powering on display...");
+    gfx->displayOn();
+}
+
+void Display::powerOff() {
+    logger->debug("DISPLAY", "Powering off display and freeing resources...");
+    gfx->displayOff();
 }
 
 void Display::clear(uint16_t color) {

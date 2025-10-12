@@ -11,10 +11,11 @@ class Display {
 private:
     Arduino_ESP32QSPI *qspi_bus = nullptr;
     Arduino_CO5300 *gfx = nullptr;
+    Logger* logger = nullptr;
     bool initialized = false;
 
 public:
-    Display();
+    Display(Logger* logger);
     ~Display();
 
     bool init();

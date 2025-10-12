@@ -1,4 +1,5 @@
 #pragma once
+#include <Arduino.h>
 #include <HWCDC.h>
 
 /**
@@ -7,8 +8,8 @@
  */
 class Logger {
 private:
-    HWCDC* serial;
-    bool enabled;
+    HWCDC* serial = nullptr;
+    bool initialized = false;
     
 public:
     enum Level {
@@ -18,80 +19,42 @@ public:
         DEBUG = 3
     };
     
-    Logger() : serial(nullptr), enabled(false) {}
-    
-    void init(HWCDC* serialPtr) {
-        serial = serialPtr;
-        enabled = (serialPtr != nullptr);
+    Logger(){};
+
+    void setSerial(HWCDC* serial) {
+        this->serial = serial;
+        this->initialized = (serial != nullptr);
     }
 
     // Generic print to generalize messages
-    void print(const char* level, const char* component, const char* message) {
-        if (!enabled) return;
-        serial->print("[");
-        serial->print(level);
-        serial->print("] ");
-        serial->print(component);
-        serial->print(": ");
-        serial->println(message);
-    }
+    void print(const char* level, const char* component, const char* message);
     
     // Error messages (always shown)
-    void error(const char* component, const char* message) {
-        if (!enabled) return;
-        print("ERROR", component, message);
-    }
+    void error(const char* component, const char* message);
     
     // Warning messages
-    void warn(const char* component, const char* message) {
-        if (!enabled) return;
-        print("WARN", component, message);
-    }
+    void warn(const char* component, const char* message);
     
     // Info messages (normal operation)
-    void info(const char* component, const char* message) {
-        if (!enabled) return;
-        print("INFO", component, message);
-    }
+    void info(const char* component, const char* message);
     
     // Debug messages (detailed info)
-    void debug(const char* component, const char* message) {
-        if (!enabled) return;
-        print("DEBUG", component, message);
-    }
+    void debug(const char* component, const char* message);
     
     // Success messages
-    void success(const char* component, const char* message) {
-        if (!enabled) return;
-        print("SUCCESS", component, message);
-    }
+    void success(const char* component, const char* message);
     
     // Failure messages
-    void failure(const char* component, const char* message) {
-        if (!enabled) return;
-        print("FAILURE", component, message);
-    }
+    void failure(const char* component, const char* message);
     
     // Section headers
-    void header(const char* title) {
-        if (!enabled) return;
-        serial->println("==========================================");
-        serial->print("| ");
-        serial->println(title);
-        serial->println("==========================================");
-    }
+    void header(const char* title);
     
     // Section footers
-    void footer() {
-        if (!enabled) return;
-        serial->println("==========================================");
-    }
+    void footer();
     
     // Raw println (for compatibility)
-    void println(const char* message) {
-        if (!enabled) return;
-        serial->println(message);
-    }
+    void println(const char* message);
 };
 
 // Global logger instance

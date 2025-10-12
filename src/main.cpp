@@ -1,11 +1,11 @@
 #include <Arduino.h>
-#include "HWCDC.h"
 #include "system/system_manager.hpp"
 #include "config.h"
 #include "logger/logger.hpp"
 
 HWCDC USBSerial;
-SystemManager system_manager;
+Logger logger = Logger();
+SystemManager *system_manager = nullptr;
 
 void setup() {
     // Initialize USB Serial
@@ -15,15 +15,17 @@ void setup() {
     }
     
     // Initialize logger
-    logger.init(&USBSerial);
-    
+    logger.setSerial(&USBSerial);
+
     // Welcome message
     logger.header("ESP32-S3 Touch AMOLED System Setup");
     logger.info("MAIN", "System starting...");
     logger.info("MAIN", "Version: 1.0.0");
-    
+
     // Initialize system
-    if (!system_manager.init(USBSerial)) {
+    system_manager = new SystemManager(&logger);
+
+    if (!system_manager->isInitialized()) {
         logger.error("MAIN", "System initialization failed - halting");
         while(true) { 
             delay(1000);
@@ -36,5 +38,5 @@ void setup() {
 
 void loop() {
     // Main loop code
-    system_manager.update();
+    system_manager->update();
 }

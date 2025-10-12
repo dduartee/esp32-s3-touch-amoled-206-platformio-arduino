@@ -3,7 +3,6 @@
 #include <Arduino.h>
 
 #include <HWCDC.h>
-#include <Wire.h>
 #include <LittleFS.h>
 
 #include "config.h"
@@ -16,7 +15,7 @@ class SystemManager {
 private:
     bool initialized = false;
     bool sleeping = false;
-    HWCDC* usbSerial;
+    Logger* logger = nullptr;
     TwoWire* i2c = nullptr;
     PMU pmu;
     FSManager fsManager;
@@ -27,11 +26,12 @@ private:
     void wakeup();
     void logHeartbeat();
 public:
-    SystemManager() : usbSerial(nullptr), i2c(nullptr) {}
-    bool init(HWCDC &USBSerial);
-    void update();
+    SystemManager(Logger* logger);
+    bool isInitialized() const { return initialized; }
     PMU& getPMU() { return pmu; }
     Display& getDisplay() { return display; }
-    HWCDC* getUSBSerial() { return usbSerial; }
+    Logger* getLogger() { return logger; }
     TwoWire* getI2C() { return i2c; }
+    
+    void update();
 };

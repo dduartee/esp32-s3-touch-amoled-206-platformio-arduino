@@ -1,15 +1,14 @@
 #include "pmu.hpp"
 
-bool PMU::init(HWCDC &serial, TwoWire &wire) {
-    logger.debug("PMU", "Starting AXP2101 initialization...");
-    
-    if(!this->pmu.begin(wire, this->pmuAddress, PMU_SDA, PMU_SCL)) {
-        logger.failure("PMU", "AXP2101 not found");
+bool PMU::setBus(TwoWire &wire) {
+    this->logger->debug("PMU", "Starting AXP2101 initialization...");
+    if (!this->pmu.begin(wire, this->pmuAddress, PMU_SDA, PMU_SCL)) {
+        this->logger->failure("PMU", "AXP2101 not found");
         initialized = false;
         return false;
     }
-    
-    logger.success("PMU", "AXP2101 initialized successfully");
+
+    this->logger->success("PMU", "AXP2101 initialized successfully");
     initialized = true;
     return true;
 }

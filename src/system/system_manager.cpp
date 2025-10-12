@@ -1,50 +1,47 @@
 #include "system_manager.hpp"
 
-bool SystemManager::init(HWCDC &usbSerial) {
-    // Store pointers to passed objects
-    this->usbSerial = &usbSerial;
-    
-    // Initialize logger
-    logger.init(&usbSerial);
-    
-    logger.header("SystemManager Initialization");
+SystemManager::SystemManager(Logger* logger)
+    : logger(logger), pmu(logger), display(logger), fsManager(logger) // Explicitly initialize pmu
+{
+    logger->header("SystemManager Initialization");
 
     // init power button
     pinMode(BTN_BOOT, INPUT_PULLUP);
     
     // Initialize I2C bus (400kHz Fast Mode)
-    logger.info("I2C", "Initializing bus at 400kHz...");
+    logger->info("I2C", "Initializing bus at 400kHz...");
     Wire.begin(I2C_SDA, I2C_SCL, 400000); 
     this->i2c = &Wire;
-    logger.success("I2C", "Bus initialized at 400kHz");
-    
+
+    logger->success("I2C", "Bus initialized at 400kHz");
+
     // Initialize PMU
-    logger.info("PMU", "Initializing AXP2101...");
-    if (!pmu.init(usbSerial, Wire)) {
-        logger.failure("PMU", "AXP2101 initialization failed");
-        logger.footer();
-        return false;
+    logger->info("PMU", "Initializing AXP2101...");
+    if (!pmu.setBus(*i2c)) {
+        logger->failure("PMU", "AXP2101 initialization failed");
+        logger->footer();
+        return;
     }
 
     // Initialize Display
-    logger.info("DISPLAY", "Initializing CO5300 AMOLED...");
-    if (!display.init()) {
-        logger.failure("DISPLAY", "CO5300 initialization failed");
-        logger.footer();
-        return false;
+    logger->info("DISPLAY", "Initializing CO5300 AMOLED...");
+    if (!display.isInitialized()) {
+        logger->failure("DISPLAY", "CO5300 initialization failed");
+        logger->footer();
+        return;
     }
 
-    if(!fsManager.begin()) {
-        logger.failure("LittleFS", "Failed to initialize LittleFS");
-        logger.footer();
-        return false;
+    if(!fsManager.isInitialized()) {
+        logger->failure("LittleFS", "Failed to initialize LittleFS");
+        logger->footer();
+        return;
     }
-
-    logger.success("SYSTEM", "All components initialized successfully");
-    logger.footer();
+    
+    logger->success("SYSTEM", "All components initialized successfully");
+    logger->footer();
     
     this->initialized = true;
-    return true;
+    return;
 }
 
 void SystemManager::update() {
@@ -58,12 +55,13 @@ void SystemManager::update() {
     // Heartbeat every 5 seconds
     if (millis() - lastTime > 5000) {
         lastTime = millis();
+        this->logger->debug("SYSTEM", "Heartbeat log");
         this->logHeartbeat();
     }
 }
 
 void SystemManager::sleep() {
-    logger.info("SYSTEM", "Entering light sleep mode...");
+    logger->info("SYSTEM", "Entering light sleep mode...");
 
     if(!sleeping) {
         display.powerOff();
@@ -77,7 +75,7 @@ void SystemManager::sleep() {
         }
     }
 
-    logger.info("SYSTEM", "Button released, preparing for light sleep...");
+    logger->info("SYSTEM", "Button released, preparing for light sleep...");
 
     sleeping = true;
     esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_BOOT, 0); // Wakeup on LOW
@@ -85,7 +83,7 @@ void SystemManager::sleep() {
     esp_light_sleep_start();
 
     // After light sleep: reinitialize display
-    logger.info("SYSTEM", "Waking up from light sleep...");
+    logger->info("SYSTEM", "Waking up from light sleep...");
     wakeup();
 }
 
@@ -93,7 +91,7 @@ void SystemManager::wakeup() {
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-        logger.info("SYSTEM", "Woke up by button press");
+        logger->info("SYSTEM", "Woke up by button press");
         display.powerOn();
         sleeping = false;
     }
@@ -108,42 +106,20 @@ void SystemManager::logHeartbeat() {
         lastTime = millis();
         heartbeat++;
 
-        this->usbSerial->println("========================================");
-        this->usbSerial->print("| HEARTBEAT #");
-        this->usbSerial->println(heartbeat);
-        this->usbSerial->print("| UPTIME: ");
-        this->usbSerial->print(millis() / 1000);
-        this->usbSerial->println(" seconds");
+        logger->header((String("SYSTEM HEARTBEAT #") + String(heartbeat)).c_str());
+        logger->info("UPTIME", (String(millis() / 1000) + String(" seconds")).c_str());
         
         // Memory Status
-        this->usbSerial->print("| Internal RAM Free: ");
-        this->usbSerial->print(ESP.getFreeHeap() / 1024);
-        this->usbSerial->println(" KB");
+        logger->info("MEMORY", (String("Internal RAM Free: ") + String(ESP.getFreeHeap() / 1024) + String(" KB")).c_str());
+        logger->info("MEMORY", (String("PSRAM Free: ") + String(ESP.getFreePsram() / 1024) + String(" KB")).c_str());
+        logger->info("MEMORY", (String("FLASH Size: ") + String(ESP.getFlashChipSize() / 1024) + String(" KB")).c_str());
 
-        this->usbSerial->print("| PSRAM Free: ");
-        this->usbSerial->print(ESP.getFreePsram() / 1024);
-        this->usbSerial->println(" KB");
+        logger->info("BATTERY", (String("Battery Voltage: ") + String(this->getPMU().getBattVoltage()) + String(" mV")).c_str());
+        logger->info("BATTERY", (String("Battery Percentage: ") + String(this->getPMU().getBatteryPercent()) + String(" %")).c_str());
 
-        this->usbSerial->print("| FLASH Size: ");
-        this->usbSerial->print(ESP.getFlashChipSize() / 1024);
-        this->usbSerial->println(" KB");
-
-        this->usbSerial->print("| Battery Voltage: ");
-        this->usbSerial->print(this->getPMU().getBattVoltage());
-        this->usbSerial->print(" mV / ");
-        this->usbSerial->print(this->getPMU().getBatteryPercent());
-        this->usbSerial->println(" %");
-
-        this->usbSerial->print("| USB Connected: ");
-        this->usbSerial->println(this->getPMU().isUSBConnected() ? "Yes" : "No");
-
-        this->usbSerial->print("| Battery Connected: ");
-        this->usbSerial->println(this->getPMU().isBatteryConnect() ? "Yes" : "No");
-
-        this->usbSerial->print("| Charging: ");
-        this->usbSerial->println(this->getPMU().isCharging() ? "Yes" : "No");
-
-        this->usbSerial->println("| USB SERIAL + PSRAM STABLE!");
-        this->usbSerial->println("========================================");
+        logger->info("BATTERY", (String("USB Connected: ") + String(this->getPMU().isUSBConnected() ? "Yes" : "No")).c_str());
+        logger->info("BATTERY", (String("Battery Connected: ") + String(this->getPMU().isBatteryConnect() ? "Yes" : "No")).c_str());
+        logger->info("BATTERY", (String("Charging: ") + String(this->getPMU().isCharging() ? "Yes" : "No")).c_str());
+        logger->footer();
     }
 }

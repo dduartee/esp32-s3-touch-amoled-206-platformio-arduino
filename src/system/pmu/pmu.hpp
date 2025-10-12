@@ -7,11 +7,15 @@
 
 class PMU {
 private:
+    Logger* logger = nullptr;
     XPowersAXP2101 pmu;
     uint8_t pmuAddress = 0x34;
     bool initialized = false;
 public:
-    bool init(HWCDC &serial, TwoWire &wire);
+    PMU(Logger *logger) { this->logger = logger; };
+    PMU(Logger *logger, TwoWire &wire);
+    bool setBus(TwoWire &wire);
+    bool isInitialized() const { return initialized; }
     bool isBatteryConnect();
     bool isCharging();
     bool isUSBConnected();
