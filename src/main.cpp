@@ -2,7 +2,7 @@
 #include "HWCDC.h"
 #include "system/system_manager.hpp"
 #include "config.h"
-#include "logger.hpp"
+#include "logger/logger.hpp"
 
 HWCDC USBSerial;
 SystemManager system_manager;

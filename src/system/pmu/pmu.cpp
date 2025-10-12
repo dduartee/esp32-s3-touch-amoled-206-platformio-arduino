@@ -1,5 +1,4 @@
 #include "pmu.hpp"
-#include "../../logger.hpp"
 
 bool PMU::init(HWCDC &serial, TwoWire &wire) {
     logger.debug("PMU", "Starting AXP2101 initialization...");

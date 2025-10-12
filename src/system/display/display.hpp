@@ -5,9 +5,10 @@
 #include <Arduino_GFX_Library.h>
 #include "config.h"
 
+#include "../../logger/logger.hpp"
+
 class Display {
 private:
-    HWCDC* usbSerial = nullptr;
     Arduino_ESP32QSPI *qspi_bus = nullptr;
     Arduino_CO5300 *gfx = nullptr;
     bool initialized = false;
@@ -15,8 +16,10 @@ private:
 public:
     Display();
     ~Display();
-    
-    bool init(HWCDC &usbSerial);
+
+    bool init();
+    void powerOn();  // Display einschalten
+    void powerOff(); // Display abschalten und Speicher freigeben
     void clear(uint16_t color = 0x0000);
     void fillScreen(uint16_t color);
     
@@ -44,6 +47,10 @@ public:
     void setBrightness(uint8_t brightness);
     void startWrite();
     void endWrite();
+    
+    // Convenience methods
+    void clearScreen(uint16_t color = 0x0000);
+    void drawText(int16_t x, int16_t y, const char* text, uint16_t color, uint8_t size = 1);
     
     // Status
     bool isInitialized() { return initialized; }

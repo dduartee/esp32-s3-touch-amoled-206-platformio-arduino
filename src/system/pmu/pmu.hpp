@@ -3,6 +3,8 @@
 
 #include "XPowersAXP2101.tpp"
 
+#include "../../logger/logger.hpp"
+
 class PMU {
 private:
     XPowersAXP2101 pmu;

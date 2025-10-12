@@ -1,33 +1,40 @@
 #include "display.hpp"
 #include <cstdarg>
-#include "../../logger.hpp"
 
 Display::Display() : gfx(nullptr), initialized(false) {
 }
 
 Display::~Display() {
-    if (gfx) {
-        delete gfx;
-    }
+    powerOff();
 }
 
-bool Display::init(HWCDC &usbSerial) {
-    this->usbSerial = &usbSerial;
-    
+void Display::powerOn() {
+    logger.debug("DISPLAY", "Powering on display...");
+    gfx->displayOn();
+}
+
+void Display::powerOff() {
+    logger.debug("DISPLAY", "Powering off display and freeing resources...");
+    gfx->displayOff();
+}
+
+bool Display::init() {
     logger.debug("DISPLAY", "Starting CO5300 AMOLED initialization...");
-    
+
     // Initialize QSPI bus
     logger.debug("DISPLAY", "Creating QSPI bus...");
     qspi_bus = new Arduino_ESP32QSPI(LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
-    
+
     if (!qspi_bus) {
         logger.failure("DISPLAY", "Failed to create QSPI bus");
         return false;
     }
+
     logger.success("DISPLAY", "QSPI bus created successfully");
     
     // Initialize display driver
     logger.debug("DISPLAY", "Creating CO5300 driver instance...");
+    
     gfx = new Arduino_CO5300(
         qspi_bus, LCD_RESET, LCD_ORIENTATION,
         LCD_WIDTH, LCD_HEIGHT,
@@ -45,7 +52,12 @@ bool Display::init(HWCDC &usbSerial) {
     
     logger.debug("DISPLAY", "Starting display hardware...");
     gfx->begin();
+
+    logger.debug("DISPLAY", "Setting rotation...");
     gfx->setRotation(0);
+
+    logger.debug("DISPLAY", "Filling screen with red for initial test...");
+    gfx->fillScreen(RGB565_RED);
 
     logger.success("DISPLAY", "Display ready");
     initialized = true;
@@ -168,5 +180,20 @@ void Display::startWrite() {
 void Display::endWrite() {
     if (initialized && gfx) {
         gfx->endWrite();
+    }
+}
+
+void Display::clearScreen(uint16_t color) {
+    if (initialized && gfx) {
+        gfx->fillScreen(color);
+    }
+}
+
+void Display::drawText(int16_t x, int16_t y, const char* text, uint16_t color, uint8_t size) {
+    if (initialized && gfx) {
+        gfx->setCursor(x, y);
+        gfx->setTextColor(color);
+        gfx->setTextSize(size);
+        gfx->print(text);
     }
 }

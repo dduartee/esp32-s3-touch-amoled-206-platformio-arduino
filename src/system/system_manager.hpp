@@ -9,16 +9,22 @@
 #include "config.h"
 #include "pmu/pmu.hpp"
 #include "display/display.hpp"
+#include "button/button.hpp"
+#include "storage/fs_manager.hpp"
 
 class SystemManager {
 private:
     bool initialized = false;
+    bool sleeping = false;
     HWCDC* usbSerial;
     TwoWire* i2c = nullptr;
     PMU pmu;
+    FSManager fsManager;
     Display display;
     //TouchController touch;
 
+    void sleep();
+    void wakeup();
     void logHeartbeat();
 public:
     SystemManager() : usbSerial(nullptr), i2c(nullptr) {}

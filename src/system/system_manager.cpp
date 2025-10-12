@@ -1,5 +1,4 @@
 #include "system_manager.hpp"
-#include "../logger.hpp"
 
 bool SystemManager::init(HWCDC &usbSerial) {
     // Store pointers to passed objects
@@ -9,6 +8,9 @@ bool SystemManager::init(HWCDC &usbSerial) {
     logger.init(&usbSerial);
     
     logger.header("SystemManager Initialization");
+
+    // init power button
+    pinMode(BTN_BOOT, INPUT_PULLUP);
     
     // Initialize I2C bus (400kHz Fast Mode)
     logger.info("I2C", "Initializing bus at 400kHz...");
@@ -26,74 +28,17 @@ bool SystemManager::init(HWCDC &usbSerial) {
 
     // Initialize Display
     logger.info("DISPLAY", "Initializing CO5300 AMOLED...");
-    if (!display.init(usbSerial)) {
+    if (!display.init()) {
         logger.failure("DISPLAY", "CO5300 initialization failed");
         logger.footer();
         return false;
     }
 
-    // Try to mount LittleFS first without formatting
-    if(!LittleFS.begin(false)) {
-        logger.info("LittleFS", "Initial mount failed, attempting format...");
-        
-        // If mount fails, format and try again
-        if(!LittleFS.begin(true)) {
-            logger.failure("LittleFS", "Failed to mount LittleFS even after formatting");
-            logger.footer();
-            return false;
-        }
-        logger.success("LittleFS", "LittleFS formatted and mounted successfully");
-    } else {
-        logger.success("LittleFS", "LittleFS mounted successfully");
-    }
-
-    logger.info("LittleFS", String("Total space: " + String(LittleFS.totalBytes() / 1024) + " KB").c_str());
-    logger.info("LittleFS", String("Used space: " + String(LittleFS.usedBytes() / 1024) + " KB").c_str());
-
-    // Create test file if it doesn't exist
-    if (!LittleFS.exists("/test.txt")) {
-        File testFile = LittleFS.open("/test.txt", FILE_WRITE);
-        if (testFile) {
-            testFile.print("Hello ESP32S3 LittleFS Storage");
-            testFile.close();
-            logger.info("LittleFS", "Created test file");
-        }
-    }
-
-    File file = LittleFS.open("/test.txt");
-    if(!file || file.isDirectory()){
-        logger.failure("LittleFS", "Failed to open test file for reading");
+    if(!fsManager.begin()) {
+        logger.failure("LittleFS", "Failed to initialize LittleFS");
         logger.footer();
         return false;
     }
-
-    logger.info("LittleFS", "Contents of /test.txt:");
-    while(file.available()){
-        String line = file.readStringUntil('\n');
-        usbSerial.println(line);
-    }
-    file.close();
-    logger.success("LittleFS", "File read successfully");
-
-    file = LittleFS.open("/config.json", FILE_WRITE);
-    file.print("{\"setting\":\"value\"}");
-    file.close();
-
-    file = LittleFS.open("/config.json");
-
-    if(!file || file.isDirectory()){
-        logger.failure("LittleFS", "Failed to open config file for reading");
-        logger.footer();
-        return false;
-    }
-
-    logger.info("LittleFS", "Contents of /config.json:");
-    while(file.available()){
-        String line = file.readStringUntil('\n');
-        usbSerial.println(line);
-    }
-    file.close();
-    logger.success("LittleFS", "File read successfully");
 
     logger.success("SYSTEM", "All components initialized successfully");
     logger.footer();
@@ -105,11 +50,52 @@ bool SystemManager::init(HWCDC &usbSerial) {
 void SystemManager::update() {
     static unsigned long lastTime = 0;
     
+    // Simple button check
+    if (buttonPressed(BTN_BOOT)) {
+        this->sleep();
+    }
+    
     // Heartbeat every 5 seconds
     if (millis() - lastTime > 5000) {
         lastTime = millis();
-
         this->logHeartbeat();
+    }
+}
+
+void SystemManager::sleep() {
+    logger.info("SYSTEM", "Entering light sleep mode...");
+
+    if(!sleeping) {
+        display.powerOff();
+        delay(50); // Display sicher abschalten
+
+        // TODO: sleep peripherals (I2C, PMU, etc.)
+
+        // Warten bis Button losgelassen (HIGH)
+        while (digitalRead(BTN_BOOT) == LOW) {
+            delay(10);
+        }
+    }
+
+    logger.info("SYSTEM", "Button released, preparing for light sleep...");
+
+    sleeping = true;
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_BOOT, 0); // Wakeup on LOW
+    esp_sleep_enable_timer_wakeup(5000000); // Wakeup after 5 seconds (microseconds)
+    esp_light_sleep_start();
+
+    // Nach Light Sleep: Display neu initialisieren
+    logger.info("SYSTEM", "Waking up from light sleep...");
+    wakeup();
+}
+
+void SystemManager::wakeup() {
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
+        logger.info("SYSTEM", "Woke up by button press");
+        display.powerOn();
+        sleeping = false;
     }
 }
 
