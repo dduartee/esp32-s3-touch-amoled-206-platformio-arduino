@@ -32,44 +32,68 @@ bool SystemManager::init(HWCDC &usbSerial) {
         return false;
     }
 
-    // Initialize ESP32 Flash Storage
-    logger.info("ESP32_FLASH", "Initializing 32MB Flash Storage...");
-    if (!flashStorage.init()) {
-        logger.failure("ESP32_FLASH", "Flash storage initialization failed");
+    // Try to mount LittleFS first without formatting
+    if(!LittleFS.begin(false)) {
+        logger.info("LittleFS", "Initial mount failed, attempting format...");
+        
+        // If mount fails, format and try again
+        if(!LittleFS.begin(true)) {
+            logger.failure("LittleFS", "Failed to mount LittleFS even after formatting");
+            logger.footer();
+            return false;
+        }
+        logger.success("LittleFS", "LittleFS formatted and mounted successfully");
+    } else {
+        logger.success("LittleFS", "LittleFS mounted successfully");
+    }
+
+    logger.info("LittleFS", String("Total space: " + String(LittleFS.totalBytes() / 1024) + " KB").c_str());
+    logger.info("LittleFS", String("Used space: " + String(LittleFS.usedBytes() / 1024) + " KB").c_str());
+
+    // Create test file if it doesn't exist
+    if (!LittleFS.exists("/test.txt")) {
+        File testFile = LittleFS.open("/test.txt", FILE_WRITE);
+        if (testFile) {
+            testFile.print("Hello ESP32S3 LittleFS Storage");
+            testFile.close();
+            logger.info("LittleFS", "Created test file");
+        }
+    }
+
+    File file = LittleFS.open("/test.txt");
+    if(!file || file.isDirectory()){
+        logger.failure("LittleFS", "Failed to open test file for reading");
         logger.footer();
         return false;
     }
 
-    // Initialize File System
-    logger.info("FLASH_FS", "Initializing Flash File System...");
-    if (!fileSystem.init(&flashStorage)) {
-        logger.failure("FLASH_FS", "File system initialization failed");
+    logger.info("LittleFS", "Contents of /test.txt:");
+    while(file.available()){
+        String line = file.readStringUntil('\n');
+        usbSerial.println(line);
+    }
+    file.close();
+    logger.success("LittleFS", "File read successfully");
+
+    file = LittleFS.open("/config.json", FILE_WRITE);
+    file.print("{\"setting\":\"value\"}");
+    file.close();
+
+    file = LittleFS.open("/config.json");
+
+    if(!file || file.isDirectory()){
+        logger.failure("LittleFS", "Failed to open config file for reading");
         logger.footer();
         return false;
     }
 
-    // Im main.cpp oder wo auch immer:
-    auto& fs = getFileSystem();
-
-    // 😎 KEINE Größen-Management mehr nötig!
-    fs.writeStringAsFile("config.json", "{\"theme\":\"dark\",\"brightness\":80}");
-    fs.writeStringAsFile("wifi.json", "{\"ssid\":\"MyNetwork\",\"password\":\"secret\"}");
-
-    // Lesen ist genauso einfach
-    String config = fs.readFileAsString("config.json");
-    String wifiConfig = fs.readFileAsString("wifi.json");
-
-    // File Management
-    auto files = fs.listFiles();  // Alle Dateien auflisten
-    bool exists = fs.exists("logo.png");
-    uint32_t size = fs.getFileSize("background.jpg");
-    fs.deleteFile("old_file.txt");
-
-    // Statistiken
-    auto stats = fs.getStats();
-    logger.info("FS", ("Used: " + String(stats.usedSpace / 1024) + "KB").c_str());
-    logger.info("FS", ("Free: " + String(stats.freeSpace / 1024) + "KB").c_str());
-    logger.info("FS", ("Files: " + String(stats.fileCount)).c_str());
+    logger.info("LittleFS", "Contents of /config.json:");
+    while(file.available()){
+        String line = file.readStringUntil('\n');
+        usbSerial.println(line);
+    }
+    file.close();
+    logger.success("LittleFS", "File read successfully");
 
     logger.success("SYSTEM", "All components initialized successfully");
     logger.footer();
@@ -107,16 +131,16 @@ void SystemManager::logHeartbeat() {
         
         // Memory Status
         this->usbSerial->print("| Internal RAM Free: ");
-        this->usbSerial->print(ESP.getFreeHeap());
-        this->usbSerial->println(" bytes");
+        this->usbSerial->print(ESP.getFreeHeap() / 1024);
+        this->usbSerial->println(" KB");
 
         this->usbSerial->print("| PSRAM Free: ");
-        this->usbSerial->print(ESP.getFreePsram());
-        this->usbSerial->println(" bytes");
+        this->usbSerial->print(ESP.getFreePsram() / 1024);
+        this->usbSerial->println(" KB");
 
         this->usbSerial->print("| FLASH Size: ");
-        this->usbSerial->print(ESP.getFlashChipSize());
-        this->usbSerial->println(" bytes");
+        this->usbSerial->print(ESP.getFlashChipSize() / 1024);
+        this->usbSerial->println(" KB");
 
         this->usbSerial->print("| Battery Voltage: ");
         this->usbSerial->print(this->getPMU().getBattVoltage());

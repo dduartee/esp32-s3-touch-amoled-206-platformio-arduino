@@ -31,30 +31,6 @@ void setup() {
         }
     }
     
-    // Test Flash Storage
-    logger.header("Testing 24MB Flash Storage");
-    auto& flash = system_manager.getFlashStorage();
-    
-    if (flash.runTest()) {
-        logger.success("TEST", "Flash storage test passed!");
-        
-        // Show flash info
-        logger.info("FLASH_INFO", flash.getFlashInfo().c_str());
-        
-        // Test user operations
-        logger.info("TEST", "Writing sample data...");
-        flash.writeString(0x0000, "Hello from 24MB Flash!");
-        flash.writeString(0x1000, "ESP32-S3 AMOLED Touch Display");
-        
-        String text1 = flash.readString(0x0000);
-        String text2 = flash.readString(0x1000);
-        
-        logger.success("TEST", String("Read back: '" + text1 + "'").c_str());
-        logger.success("TEST", String("Read back: '" + text2 + "'").c_str());
-    } else {
-        logger.failure("TEST", "Flash storage test failed!");
-    }
-    
     logger.header("System setup complete");
 }
 
