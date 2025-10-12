@@ -4,17 +4,17 @@
  * Hardware Pin Definitions
  */
 
-// AMOLED Display Pins (QSPI Interface)
+// AMOLED display pins (QSPI interface)
 #define LCD_SDIO0       4       // Data 0 (MOSI)
 #define LCD_SDIO1       5       // Data 1
-#define LCD_SDIO2       6       // Data 2  
+#define LCD_SDIO2       6       // Data 2
 #define LCD_SDIO3       7       // Data 3
-#define LCD_SCLK        11      // Serial Clock
-#define LCD_CS          12      // Chip Select
-#define LCD_RESET       8       // Reset Pin
+#define LCD_SCLK        11      // Serial clock
+#define LCD_CS          12      // Chip select
+#define LCD_RESET       8       // Reset pin
 #define LCD_TE          13      // Tear enable (not used)
 
-// Display Properties
+// Display properties
 #define LCD_WIDTH       410
 #define LCD_HEIGHT      502
 #define LCD_ORIENTATION 0       // 0=Portrait, 1=Landscape 90°, 2=Portrait 180°, 3=Landscape 270°
@@ -24,42 +24,42 @@
 #define LCD_ROW_OFFSET2 0
 
 // I2C bus
-#define I2C_SDA         15      // shared I2C bus
-#define I2C_SCL         14      // shared I2C bus
+#define I2C_SDA         15      // Shared I2C bus
+#define I2C_SCL         14      // Shared I2C bus
 
-// Touch Controller Pins (I2C Interface - FT3168)
-#define TOUCH_SDA       I2C_SDA // shared I2C bus
-#define TOUCH_SCL       I2C_SCL // shared I2C bus
-#define TOUCH_INT       38      // Touch Interrupt
-#define TOUCH_RST       9       // Touch Reset
+// Touch controller pins (I2C interface - FT3168)
+#define TOUCH_SDA       I2C_SDA // Shared I2C bus
+#define TOUCH_SCL       I2C_SCL // Shared I2C bus
+#define TOUCH_INT       38      // Touch interrupt
+#define TOUCH_RST       9       // Touch reset
 
-// IMU Pins (I2C Interface - QMI8658)
-#define IMU_SDA         I2C_SDA // shared I2C bus
-#define IMU_SCL         I2C_SCL // shared I2C bus
-#define IMU_INT1        21      // IMU Interrupt 1
+// IMU pins (I2C interface - QMI8658)
+#define IMU_SDA         I2C_SDA // Shared I2C bus
+#define IMU_SCL         I2C_SCL // Shared I2C bus
+#define IMU_INT1        21      // IMU interrupt 1
 
-// RTC Pins (I2C Interface - PCF85063)
-#define RTC_SDA         I2C_SDA // shared I2C bus
-#define RTC_SCL         I2C_SCL // shared I2C bus
-#define RTC_INT         39      // RTC Interrupt
+// RTC pins (I2C interface - PCF85063)
+#define RTC_SDA         I2C_SDA // Shared I2C bus
+#define RTC_SCL         I2C_SCL // Shared I2C bus
+#define RTC_INT         39      // RTC interrupt
 
-// Power Management Pins (I2C Interface - AXP2101)
-#define PMU_SDA         I2C_SDA // shared I2C bus
-#define PMU_SCL         I2C_SCL // shared I2C bus
+// Power management pins (I2C interface - AXP2101)
+#define PMU_SDA         I2C_SDA // Shared I2C bus
+#define PMU_SCL         I2C_SCL // Shared I2C bus
 
 // Buttons
-#define BTN_PWR         10      // Power Button
-#define BTN_BOOT        0       // Boot Button (GPIO0)
+#define BTN_PWR         10      // Power button
+#define BTN_BOOT        0       // Boot button (GPIO0)
 
-// SD Card Pins (SPI Interface)
-#define SD_MOSI         1       // SD Card MOSI
-#define SD_SCK          2       // SD Card Clock
-#define SD_MISO         3       // SD Card MISO
-#define SD_CS           17      // SD Card Chip Select
+// SD card pins (SPI interface)
+#define SD_MOSI         1       // SD card MOSI
+#define SD_SCK          2       // SD card clock
+#define SD_MISO         3       // SD card MISO
+#define SD_CS           17      // SD card chip select
 
 // Audio
-#define SPEAKER_SDA     I2C_SDA // Shared I2C Bus (for I2S Control)
-#define SPEAKER_SCL     I2C_SCL // Shared I2C Bus (for I2S Control)
+#define SPEAKER_SDA     I2C_SDA // Shared I2C bus (for I2S control)
+#define SPEAKER_SCL     I2C_SCL // Shared I2C bus (for I2S control)
 #define SPEAKER_MCLK    16
 #define SPEAKER_SCLK    41
 #define MIC_DSIN        40

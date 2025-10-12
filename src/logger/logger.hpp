@@ -66,7 +66,7 @@ public:
         print("SUCCESS", component, message);
     }
     
-    // Failure messages  
+    // Failure messages
     void failure(const char* component, const char* message) {
         if (!enabled) return;
         print("FAILURE", component, message);

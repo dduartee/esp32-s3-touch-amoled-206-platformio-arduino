@@ -18,8 +18,8 @@ public:
     ~Display();
 
     bool init();
-    void powerOn();  // Display einschalten
-    void powerOff(); // Display abschalten und Speicher freigeben
+    void powerOn();  // Turn on display
+    void powerOff(); // Turn off display
     void clear(uint16_t color = 0x0000);
     void fillScreen(uint16_t color);
     

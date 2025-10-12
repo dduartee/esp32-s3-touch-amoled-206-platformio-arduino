@@ -67,11 +67,11 @@ void SystemManager::sleep() {
 
     if(!sleeping) {
         display.powerOff();
-        delay(50); // Display sicher abschalten
+        delay(50); // Safely turn off display
 
         // TODO: sleep peripherals (I2C, PMU, etc.)
 
-        // Warten bis Button losgelassen (HIGH)
+        // Wait until button is released (HIGH)
         while (digitalRead(BTN_BOOT) == LOW) {
             delay(10);
         }
@@ -84,7 +84,7 @@ void SystemManager::sleep() {
     esp_sleep_enable_timer_wakeup(5000000); // Wakeup after 5 seconds (microseconds)
     esp_light_sleep_start();
 
-    // Nach Light Sleep: Display neu initialisieren
+    // After light sleep: reinitialize display
     logger.info("SYSTEM", "Waking up from light sleep...");
     wakeup();
 }

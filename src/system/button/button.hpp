@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 
-// Einfache Button-Funktion mit Entprellung
+// Simple button function with debounce
 inline bool buttonPressed(uint8_t pin) {
     static unsigned long lastPress[40] = {0};
     static bool lastState[40] = {HIGH};
