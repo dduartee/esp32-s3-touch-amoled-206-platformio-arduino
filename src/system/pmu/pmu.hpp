@@ -14,10 +14,26 @@ private:
 public:
     PMU(Logger *logger) { this->logger = logger; };
     bool setBus(TwoWire &wire);
+    
     bool isInitialized() const { return initialized; }
-    bool isBatteryConnect();
-    bool isCharging();
-    bool isUSBConnected();
-    uint8_t getBatteryPercent();
-    uint16_t getBattVoltage();
+    
+    bool isBatteryConnect() {
+        return initialized ? pmu.isBatteryConnect() : false;
+    }
+    
+    bool isCharging() {
+        return initialized ? pmu.isCharging() : false;
+    }
+    
+    bool isUSBConnected() {
+        return initialized ? pmu.isVbusIn() : false;
+    }
+    
+    uint8_t getBatteryPercent() {
+        return initialized ? pmu.getBatteryPercent() : 0;
+    }
+    
+    uint16_t getBattVoltage() {
+        return initialized ? pmu.getBattVoltage() : 0;
+    }
 };

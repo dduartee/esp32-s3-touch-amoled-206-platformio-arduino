@@ -37,10 +37,9 @@ public:
 
     void handleInterrupt();
 
-    bool available();
     bool readTouch(uint16_t &x, uint16_t &y);
 
-    // FT3x68 register map (use these instead of global macros)
+    // FT3168 register map
     enum Registers : uint8_t {
         REG_GESTURE_ID = 0xD3,
         REG_FINGER_NUM = 0x02,

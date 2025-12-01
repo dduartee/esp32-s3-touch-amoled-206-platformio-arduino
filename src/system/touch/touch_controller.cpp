@@ -10,11 +10,11 @@ bool TouchController::setBus(TwoWire &bus) {
 
 bool TouchController::init() {
     if (!i2c) {
-        if (this->logger) this->logger->failure("TOUCH", "I2C bus not set");
-        initialized = false;
+        if (logger) logger->failure("TOUCH", "I2C bus not set");
         return false;
     }
 
+    // Hardware reset
     pinMode(reset_pin, OUTPUT);
     digitalWrite(reset_pin, HIGH);
     delay(1);
@@ -23,66 +23,28 @@ bool TouchController::init() {
     digitalWrite(reset_pin, HIGH);
     delay(50);
 
-    // Initialize device power mode via direct I2C
-    // Retry a few times if the bus reports errors.
-    const int init_retries = 3;
-    bool init_ok = false;
-    for (int attempt = 0; attempt < init_retries; ++attempt) {
-        i2c->beginTransmission(i2c_addr);
-        i2c->write(TouchController::REG_POWER_MODE);
-        i2c->write(0B00000001);
-        int err = i2c->endTransmission();
-        if (err == 0) { init_ok = true; break; }
-        if (this->logger) this->logger->debug("TOUCH", (String("init write failed, attempt=") + attempt + String(" err=") + err + " retrying").c_str());
-        delay(10 + attempt * 20);
+    // Initialize power mode
+    i2c->beginTransmission(i2c_addr);
+    i2c->write(REG_POWER_MODE);
+    i2c->write(0x01);
+    if (i2c->endTransmission() != 0) {
+        if (logger) logger->failure("TOUCH", "Power mode init failed");
+        return false;
     }
-    if (!init_ok) {
-        if (this->logger) this->logger->failure("TOUCH", "initialization write failed");
-    } else {
-        delay(20);
-    }
+    delay(20);
 
-    // Enable gesture mode
-    bool gesture_ok = false;
-    for (int attempt = 0; attempt < init_retries; ++attempt) {
-        i2c->beginTransmission(i2c_addr);
-        i2c->write(TouchController::REG_GESTURE_MODE);
-        i2c->write(0x01); // enable gesture
-        int err = i2c->endTransmission();
-        if (err == 0) { gesture_ok = true; break; }
-        delay(10 + attempt * 20);
-    }
-    if (gesture_ok) {
-        if (this->logger) this->logger->info("TOUCH", "Gesture mode enabled");
-        // Verify gesture register is readable
-        uint8_t g_test = 0;
-        if (safeReadRegisters(TouchController::REG_GESTURE_ID, &g_test, 1)) {
-            if (this->logger) this->logger->debug("TOUCH", (String("Gesture register reads: 0x") + String(g_test, HEX)).c_str());
-        } else {
-            if (this->logger) this->logger->warn("TOUCH", "Cannot read gesture register");
-        }
-    } else {
-        if (this->logger) this->logger->warn("TOUCH", "Gesture mode enable failed");
-    }
-
+    // Verify device ID
     uint8_t dev_id = 0;
-    if (safeReadRegisters(TouchController::REG_DEVICE_ID, &dev_id, 1)) {
-        if(dev_id != DEV_ID) {
-            if (this->logger) this->logger->warn("TOUCH", (String("Unexpected FT3x68 device id: 0x0") + String(dev_id, HEX) + String(" (") + dev_id + ")").c_str());
-            initialized = false;
-            return false;
-        }
-        logger->info("TOUCH", (String("FT3x68 device id: 0x0") + String(dev_id, HEX) + String(" (") + dev_id + ")").c_str());
-    } else {
-        logger->warn("TOUCH", "Could not read device id after init");
+    if (!safeReadRegisters(REG_DEVICE_ID, &dev_id, 1) || dev_id != DEV_ID) {
+        if (logger) logger->failure("TOUCH", "FT3168 not found");
+        return false;
     }
 
+    // Setup interrupt
     pinMode(interrupt_pin, INPUT_PULLUP);
     attachInterruptArg(digitalPinToInterrupt(interrupt_pin), TouchController::isrArg, this, FALLING);
 
-    if (this->logger) this->logger->debug("TOUCH", "Interrupt handler attached");
-    if (this->logger) this->logger->success("TOUCH", "Touch controller initialized");
-
+    if (logger) logger->success("TOUCH", "FT3168 initialized");
     initialized = true;
     touch_event = false;
     
@@ -194,47 +156,27 @@ void TouchController::handleInterrupt() {
 bool TouchController::safeReadRegisters(uint8_t reg, uint8_t* buf, size_t len, int retries) {
     if (!i2c) return false;
 
-    for (int i=0;i<retries;i++) {
+    for (int i=0; i<retries; i++) {
         i2c->beginTransmission(i2c_addr);
         i2c->write(reg);
         if (i2c->endTransmission(false) != 0) { delay(10 + i*10); continue; }
         delayMicroseconds(500);
         size_t got = i2c->requestFrom(static_cast<uint8_t>(i2c_addr), static_cast<size_t>(len));
         if (got < len) { delay(10 + i*10); continue; }
-        for (size_t j=0;j<len;j++) buf[j] = i2c->read();
+        for (size_t j=0; j<len; j++) buf[j] = i2c->read();
         return true;
     }
     return false;
 }
 
-bool TouchController::available() {
-    // Check IRQ flag first (set by ISR) to avoid unnecessary bus traffic
-    if (touch_event) return true;
-
-    // fallback: poll a status register
-    uint8_t fingers = 0;
-    if (!safeReadRegisters(TouchController::REG_FINGER_NUM, &fingers, 1)) return false;
-
-    return (fingers != 0);
-}
-
 bool TouchController::readTouch(uint16_t &x, uint16_t &y) {
     uint8_t data[4];
 
-    if (!safeReadRegisters(TouchController::REG_X1_POSH, data, 4)) return false;
-    // FT3x68: high byte contains flags in upper nibble, data in lower 4 bits
-    uint16_t xh = ((uint16_t)(data[0] & 0x0F) << 8) | (uint16_t)data[1];
-    uint16_t yh = ((uint16_t)(data[2] & 0x0F) << 8) | (uint16_t)data[3];
-
-    // Basic sanity clamps (display is smaller than 2048 typically)
-    if (xh > 4095) xh = 0;
-    if (yh > 4095) yh = 0;
-
-    x = xh;
-    y = yh;
-
-    // clear IRQ flag on successful read
-    touch_event = false;
+    if (!safeReadRegisters(REG_X1_POSH, data, 4)) return false;
+    
+    // FT3168: high byte contains flags in upper nibble, data in lower 4 bits
+    x = ((uint16_t)(data[0] & 0x0F) << 8) | (uint16_t)data[1];
+    y = ((uint16_t)(data[2] & 0x0F) << 8) | (uint16_t)data[3];
 
     return true;
 }
