@@ -1,7 +1,7 @@
 #include "system_manager.hpp"
 
 SystemManager::SystemManager(Logger* logger)
-    : logger(logger), pmu(logger), display(logger), touchController(logger), fsManager(logger) // Explicitly initialize pmu
+    : logger(logger), pmu(logger), display(logger), touchController(logger), fsManager(logger), rtc(logger), imu(logger)
 {
     logger->header("SystemManager Initialization");
 
@@ -49,6 +49,35 @@ SystemManager::SystemManager(Logger* logger)
         return;
     }
 
+    // Initialize RTC
+    logger->info("RTC", "Initializing PCF85063...");
+    if (!rtc.setBus(*i2c)) {
+        logger->failure("RTC", "PCF85063 initialization failed");
+        logger->footer();
+        return;
+    }
+    
+    // Set initial time for testing (2025-12-01 14:30:00)
+    RTC::DateTime testTime;
+    testTime.year = 2025;
+    testTime.month = 12;
+    testTime.day = 1;
+    testTime.hour = 14;
+    testTime.minute = 30;
+    testTime.second = 0;
+    testTime.weekday = 0; // Sunday
+    if (rtc.setDateTime(testTime)) {
+        logger->info("RTC", "Test time set: 2025-12-01 14:30:00");
+    }
+
+    // Initialize IMU
+    logger->info("IMU", "Initializing QMI8658...");
+    if (!imu.setBus(*i2c)) {
+        logger->failure("IMU", "QMI8658 initialization failed");
+        logger->footer();
+        return;
+    }
+
     // Initialize File System
     logger->info("LittleFS", "Initializing LittleFS...");
     if (!fsManager.isInitialized()) {
@@ -60,19 +89,43 @@ SystemManager::SystemManager(Logger* logger)
     logger->success("SYSTEM", "All components initialized successfully");
     logger->footer();
     
+    // Initialize activity tracking
+    last_activity_time = millis();
+    
     this->initialized = true;
     return;
 }
 
 void SystemManager::update() {
     static unsigned long lastTime = 0;
+    unsigned long current_time = millis();
+    unsigned long idle_time = current_time - last_activity_time;
     
     // Simple button check
     if (buttonPressed(BTN_BOOT)) {
-        this->sleep();
+        last_activity_time = current_time; // Reset activity timer
+        this->lightSleep();
+        return;
     }
 
     touchController.handleInterrupt();
+    
+    // Check RTC alarm
+    if (rtc.isAlarmTriggered()) {
+        logger->info("RTC", "⏰ ALARM TRIGGERED!");
+        rtc.clearAlarmFlag();
+        rtc.clearAlarm();
+        last_activity_time = current_time; // Reset activity timer
+    }
+    
+    // Hybrid Sleep Logic
+    if (idle_time > DEEP_SLEEP_TIMEOUT) {
+        logger->info("SYSTEM", "Entering deep sleep (inactive >5min)");
+        deepSleep();
+    } else if (idle_time > LIGHT_SLEEP_TIMEOUT && !sleeping) {
+        logger->info("SYSTEM", "Entering light sleep (inactive >30s)");
+        lightSleep();
+    }
     
     // Heartbeat every 5 seconds
     if (millis() - lastTime > 5000) {
@@ -82,41 +135,72 @@ void SystemManager::update() {
     }
 }
 
-void SystemManager::sleep() {
+void SystemManager::lightSleep() {
+    if (sleeping) return;
+    
     logger->info("SYSTEM", "Entering light sleep mode...");
-
-    if(!sleeping) {
-        display.powerOff();
-        delay(50); // Safely turn off display
-
-        // TODO: sleep peripherals (I2C, PMU, etc.)
-
-        // Wait until button is released (HIGH)
-        while (digitalRead(BTN_BOOT) == LOW) {
-            delay(10);
-        }
+    
+    display.powerOff();
+    delay(50);
+    
+    // Wait until button is released
+    while (digitalRead(BTN_BOOT) == LOW) {
+        delay(10);
     }
 
-    logger->info("SYSTEM", "Button released, preparing for light sleep...");
-
     sleeping = true;
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_BOOT, 0); // Wakeup on LOW
-    esp_sleep_enable_timer_wakeup(5000000); // Wakeup after 5 seconds (microseconds)
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_BOOT, 0); // Wakeup on button only
     esp_light_sleep_start();
 
-    // After light sleep: reinitialize display
     logger->info("SYSTEM", "Waking up from light sleep...");
     wakeup();
 }
 
+void SystemManager::deepSleep() {
+    logger->info("SYSTEM", "Preparing for deep sleep...");
+    
+    display.powerOff();
+    delay(50);
+    
+    // Set RTC alarm to wake up in 1 hour
+    RTC::DateTime current;
+    if (rtc.getDateTime(current)) {
+        uint8_t wakeup_hour = (current.hour + 1) % 24;
+        rtc.setAlarm(wakeup_hour, current.minute);
+        logger->info("SYSTEM", (String("Deep sleep until ") + String(wakeup_hour) + ":" + String(current.minute)).c_str());
+    }
+    
+    // Enable wakeup on button only (RTC GPIO39 not supported for ext1)
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN_BOOT, 0);
+    
+    logger->info("SYSTEM", "Entering deep sleep...");
+    delay(100);
+    
+    esp_deep_sleep_start();
+    // Never returns - ESP32 reboots on wakeup
+}
+
 void SystemManager::wakeup() {
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-        logger->info("SYSTEM", "Woke up by button press");
-        display.powerOn();
-        sleeping = false;
+    
+    switch (wakeup_reason) {
+        case ESP_SLEEP_WAKEUP_EXT0:
+            logger->info("SYSTEM", "Woke up by button press");
+            break;
+        case ESP_SLEEP_WAKEUP_EXT1:
+            logger->info("SYSTEM", "Woke up by touch/RTC interrupt");
+            break;
+        case ESP_SLEEP_WAKEUP_TIMER:
+            logger->info("SYSTEM", "Woke up by timer");
+            break;
+        default:
+            logger->info("SYSTEM", "Woke up (unknown reason)");
+            break;
     }
+    
+    display.powerOn();
+    sleeping = false;
+    last_activity_time = millis(); // Reset activity timer
 }
 
 void SystemManager::logHeartbeat() {
@@ -142,6 +226,39 @@ void SystemManager::logHeartbeat() {
         logger->info("BATTERY", (String("USB Connected: ") + String(this->getPMU().isUSBConnected() ? "Yes" : "No")).c_str());
         logger->info("BATTERY", (String("Battery Connected: ") + String(this->getPMU().isBatteryConnect() ? "Yes" : "No")).c_str());
         logger->info("BATTERY", (String("Charging: ") + String(this->getPMU().isCharging() ? "Yes" : "No")).c_str());
+
+        // RTC Status
+        if (rtc.isInitialized()) {
+            RTC::DateTime dt;
+            if (rtc.getDateTime(dt)) {
+                char timeStr[32];
+                snprintf(timeStr, sizeof(timeStr), "%04d-%02d-%02d %02d:%02d:%02d", 
+                         dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second);
+                logger->info("RTC", (String("Current Time: ") + String(timeStr)).c_str());
+            } else {
+                logger->warn("RTC", "Failed to read time");
+            }
+        }
+        
+        // IMU Status
+        if (imu.isInitialized()) {
+            IMU::AccelData accel;
+            IMU::GyroData gyro;
+            float temp;
+            
+            if (imu.readAccel(accel)) {
+                logger->info("IMU", (String("Accel: X=") + String(accel.x, 2) + "g Y=" + String(accel.y, 2) + "g Z=" + String(accel.z, 2) + "g").c_str());
+            }
+            
+            if (imu.readGyro(gyro)) {
+                logger->info("IMU", (String("Gyro: X=") + String(gyro.x, 1) + "°/s Y=" + String(gyro.y, 1) + "°/s Z=" + String(gyro.z, 1) + "°/s").c_str());
+            }
+            
+            if (imu.readTemperature(temp)) {
+                logger->info("IMU", (String("Temperature: ") + String(temp, 1) + "°C").c_str());
+            }
+        }
+        
         logger->footer();
     }
 }
