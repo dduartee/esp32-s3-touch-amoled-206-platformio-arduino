@@ -69,3 +69,9 @@
 
 // Motor
 #define MOTOR_PIN       18
+
+// Network & time settings
+#define WIFI_GMT_OFFSET_SEC    (-3 * 3600)   // Adjust to your local timezone (example: GMT-3)
+#define WIFI_DAYLIGHT_OFFSET   0             // Set daylight saving offset if applicable
+#define WIFI_PRIMARY_NTP       "pool.ntp.org"
+#define WIFI_SECONDARY_NTP     "time.nist.gov"

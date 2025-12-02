@@ -1,6 +1,9 @@
 {
     "idf.pythonInstallPath": "/usr/bin/python3",
     "files.associations": {
-        "new": "cpp"
+        "*.html": "html",
+        "new": "cpp",
+        "compare": "cpp",
+        "cstdint": "cpp"
     }
 }

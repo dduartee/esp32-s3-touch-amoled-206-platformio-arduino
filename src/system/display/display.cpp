@@ -38,8 +38,8 @@ Display::Display(Logger* logger) : gfx(nullptr), initialized(false) {
     logger->debug("DISPLAY", "Setting rotation...");
     gfx->setRotation(0);
 
-    logger->debug("DISPLAY", "Filling screen with red for initial test...");
-    gfx->fillScreen(RGB565_RED);
+    logger->debug("DISPLAY", "Clearing display...");
+    gfx->fillScreen(0x0000);  // Force black fill immediately
 
     logger->success("DISPLAY", "Display ready");
     initialized = true;

@@ -1,4 +1,5 @@
 #include "system_manager.hpp"
+#include <cstring>
 
 SystemManager::SystemManager(Logger* logger)
     : logger(logger), pmu(logger), display(logger), touchController(logger), fsManager(logger), rtc(logger), imu(logger)
@@ -86,6 +87,10 @@ SystemManager::SystemManager(Logger* logger)
         return;
     }
     
+    if (!initWiFi()) {
+        logger->warn("WIFI", "WiFi connection unavailable - clock will fall back to cached time");
+    }
+
     logger->success("SYSTEM", "All components initialized successfully");
     logger->footer();
     
@@ -103,6 +108,9 @@ void SystemManager::update() {
         this->sleep();
         return;
     }
+
+    maintainWiFi();
+    updateClockDisplay();
 
     touchController.handleInterrupt();
     
@@ -145,6 +153,171 @@ void SystemManager::update() {
         this->logger->debug("SYSTEM", "Heartbeat log");
         this->logHeartbeat();
     }
+}
+
+bool SystemManager::initWiFi() {
+    if (WIFI_CREDENTIAL_COUNT == 0) {
+        if (logger) logger->warn("WIFI", "No credentials configured in wifi_credentials.h");
+        return false;
+    }
+
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+
+    for (size_t i = 0; i < WIFI_CREDENTIAL_COUNT; ++i) {
+        wifiMulti.addAP(WIFI_CREDENTIALS[i].ssid, WIFI_CREDENTIALS[i].password);
+    }
+
+    if (logger) logger->info("WIFI", "Connecting to WiFi...");
+    wifiConnected = (wifiMulti.run(5000) == WL_CONNECTED);
+
+    if (wifiConnected) {
+        if (logger) {
+            logger->success("WIFI", (String("Connected to ") + WiFi.SSID() + String(" - IP ") + WiFi.localIP().toString()).c_str());
+        }
+        syncTime();
+        return true;
+    }
+
+    if (logger) logger->warn("WIFI", "Failed to connect to the configured networks");
+    return false;
+}
+
+void SystemManager::maintainWiFi() {
+    if (WIFI_CREDENTIAL_COUNT == 0) return;
+
+    uint8_t status = wifiMulti.run();
+    bool currentlyConnected = (status == WL_CONNECTED);
+
+    if (currentlyConnected && !wifiConnected) {
+        wifiConnected = true;
+        if (logger) {
+            logger->success("WIFI", (String("Reconnected to ") + WiFi.SSID() + String(" - ") + WiFi.localIP().toString()).c_str());
+        }
+        syncTime();
+    } else if (!currentlyConnected && wifiConnected) {
+        wifiConnected = false;
+        if (logger) logger->warn("WIFI", "WiFi connection lost");
+    }
+
+    if (wifiConnected) {
+        unsigned long now = millis();
+        if (now - lastTimeSyncAttempt > TIME_SYNC_INTERVAL) {
+            syncTime();
+        }
+    }
+}
+
+bool SystemManager::syncTime() {
+    if (!wifiConnected) return false;
+
+    lastTimeSyncAttempt = millis();
+    configTime(WIFI_GMT_OFFSET_SEC, WIFI_DAYLIGHT_OFFSET, WIFI_PRIMARY_NTP, WIFI_SECONDARY_NTP);
+
+    tm timeinfo;
+    if (getLocalTime(&timeinfo, 5000)) {
+        timeAvailable = true;
+        if (logger) {
+            char buffer[32];
+            strftime(buffer, sizeof(buffer), "%d/%m/%Y %H:%M:%S", &timeinfo);
+            logger->success("TIME", (String("Synchronized: ") + String(buffer)).c_str());
+        }
+        return true;
+    }
+
+    if (logger) logger->warn("TIME", "Failed to obtain NTP time");
+    return false;
+}
+
+void SystemManager::updateClockDisplay() {
+    if (!display.isInitialized() || sleeping) return;
+
+    unsigned long now = millis();
+
+    if (!timeAvailable) {
+        // Only update waiting screen every 1 second
+        if (now - lastClockDraw < CLOCK_DRAW_INTERVAL) return;
+        lastClockDraw = now;
+        
+        display.fillScreen(0x0000);
+        display.setTextColor(0xFFFF);
+        display.setTextSize(2);
+        display.setCursor(20, display.getHeight() / 2 - 10);
+        display.print(wifiConnected ? "Sincronizando hora..." : "Conecte-se ao WiFi");
+        return;
+    }
+
+    tm timeinfo;
+    if (!getLocalTime(&timeinfo)) {
+        if (wifiConnected && (now - lastTimeSyncAttempt > 10000)) {
+            syncTime();
+        }
+        return;
+    }
+
+    // Only render when time changes (not every millisecond)
+    char currentTime[16];
+    strftime(currentTime, sizeof(currentTime), "%H:%M:%S", &timeinfo);
+    
+    if (strcmp(currentTime, lastDisplayedTime) != 0 || !clockInitialized) {
+        strcpy(lastDisplayedTime, currentTime);
+        clockInitialized = true;
+        renderClockFace(timeinfo);
+    }
+}
+
+void SystemManager::renderClockFace(const tm& timeinfo) {
+    // Ensure the screen is completely cleared on the first render
+    if (!clockInitialized) {
+        display.fillScreen(0x0000);  // Preto
+    }
+
+    uint16_t screenWidth = display.getWidth();
+    uint16_t screenHeight = display.getHeight();
+
+    // Preparar strings
+    char timeStr[16];
+    char dateStr[24];
+    char weekDayStr[16];
+    
+    strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeinfo);
+    strftime(dateStr, sizeof(dateStr), "%d/%m/%Y", &timeinfo);
+    strftime(weekDayStr, sizeof(weekDayStr), "%A", &timeinfo);
+
+    // Limpar áreas específicas onde o texto será desenhado
+    display.fillRect(0, 80, screenWidth, 100, 0x0000);      // Limpar área da hora
+    display.fillRect(0, 190, screenWidth, 80, 0x0000);      // Clear date area
+    display.fillRect(0, 10, 200, 40, 0x0000);               // Limpar área do WiFi status
+
+    // Desenhar hora (grande, centralizada)
+    display.setTextSize(4);
+    display.setTextColor(0xFFFF);  // Branco
+    int16_t timeWidth = static_cast<int16_t>(strlen(timeStr) * 6 * 4);
+    int16_t timeX = (screenWidth > timeWidth) ? (screenWidth - timeWidth) / 2 : 10;
+    display.setCursor(timeX, 120);
+    display.print(timeStr);
+
+    // Desenhar data
+    display.setTextSize(2);
+    display.setTextColor(0xCCCC);  // Cinza
+    int16_t dateWidth = static_cast<int16_t>(strlen(dateStr) * 6 * 2);
+    int16_t dateX = (screenWidth > dateWidth) ? (screenWidth - dateWidth) / 2 : 10;
+    display.setCursor(dateX, 210);
+    display.print(dateStr);
+
+    // Desenhar dia da semana
+    display.setTextSize(2);
+    display.setTextColor(0xCCCC);
+    int16_t weekWidth = static_cast<int16_t>(strlen(weekDayStr) * 6 * 2);
+    int16_t weekX = (screenWidth > weekWidth) ? (screenWidth - weekWidth) / 2 : 10;
+    display.setCursor(weekX, 250);
+    display.print(weekDayStr);
+
+    // Desenhar status WiFi (canto superior esquerdo)
+    display.setTextSize(1.5f);
+    display.setTextColor(wifiConnected ? 0x07E0 : 0xF800);  // Verde OK, Vermelho se offline
+    display.setTextSize(1);
+    display.print(wifiConnected ? "WiFi OK" : "Offline");
 }
 
 void SystemManager::sleep() {
